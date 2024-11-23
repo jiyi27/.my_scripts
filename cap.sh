@@ -1,3 +1,5 @@
 #!/bin/bash
 
-python3 "/Users/David/.custom_scripts/python/capitalize.py" "$@" 
+source "$(dirname "$0")/config.sh"
+
+python3 "${CAPITALIZE_SCRIPT}" "$@"

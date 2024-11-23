@@ -1,16 +1,16 @@
 #!/bin/bash
 
-VENV_PATH="/Users/david/Codes/PyCharm/subtitles-translator-ai/.venv/bin/activate"
-if [ ! -f "$VENV_PATH" ]; then
-    echo "错误：找不到虚拟环境，请检查路径：$VENV_PATH"
-    exit 1
-fi
+# $0 表示当前执行的脚本文件的完整路径
+# dirname $0 表示当前执行的脚本文件的路径, 不包含文件名
+# 所以 config.sh, utils.sh 必须在当前脚本文件的同一目录下
+source "$(dirname "$0")/config.sh"
+source "$(dirname "$0")/utils.sh"
 
-# 激活虚拟环境
-source "$VENV_PATH"
+# 检查并激活虚拟环境
+activate_venv "${VENV_ACTIVATE_PATH}"
 
 # 使用虚拟环境中的Python
-python "/Users/david/Codes/PyCharm/subtitles-translator-ai/translator.py" "$@"
+python "${TRANSLATOR_SCRIPT}" "$@"
 
 # 退出虚拟环境
 deactivate
