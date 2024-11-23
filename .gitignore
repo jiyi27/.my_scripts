@@ -1,0 +1,22 @@
+# Byte-compiled
+__pycache__/
+
+# Virtual environments
+
+*env/     # 匹配普通的 env 目录
+.env/     # 匹配点开头的 env
+.venv/    # 匹配点开头的 venv
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# macOS system files
+.DS_Store
