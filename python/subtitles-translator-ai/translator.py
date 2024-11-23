@@ -173,12 +173,12 @@ class SubtitleTranslator:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='字幕翻译工具')
-    parser.add_argument('-i', '--input', required=True,
-                        help='输入的字幕文件路径 (例如: input.srt)')
-    parser.add_argument('-o', '--output', required=True,
-                        help='输出的翻译后字幕文件路径 (例如: output_zh.srt)')
-    args = parser.parse_args()
+    if len(sys.argv) != 3:
+        print("请指定两个参数 input.srt output.srt")
+        sys.exit(1)
+
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
 
     try:
         translator = SubtitleTranslator(
@@ -186,7 +186,7 @@ def main():
             model="gpt-4o",
             chunk_size=20
         )
-        translator.translate_file(args.input, args.output)
+        translator.translate_file(input_file, output_file)
     except SubtitleError as e:
         print(f"字幕处理错误: {str(e)}")
         sys.exit(1)
