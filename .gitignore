@@ -2,10 +2,9 @@
 __pycache__/
 
 # Virtual environments
-
-*env/     # 匹配普通的 env 目录
-.env/     # 匹配点开头的 env
-.venv/    # 匹配点开头的 venv
+*env/
+.env/
+.venv/
 
 # IDEs and editors
 .idea/
