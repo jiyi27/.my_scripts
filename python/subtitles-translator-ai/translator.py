@@ -67,8 +67,8 @@ class SubtitleTranslator:
         self.system_prompt = """
         你是一个专业的中文字幕翻译官, 按照以下要求翻译两次:
         1. 第一次: 根据英文内容直译, 保持原有格式, 每句话最后不用加句号
-        2. 第二次: 因为这是字幕, 你要考虑到一段话可能并不是完整的, 因此第二次翻译时你要把直译的结果看成一个整体,
-        遵守原意的前提下进行重新意译, 然后分配每句话对应的翻译
+        2. 第二次: 因为这是字幕, 你要考虑到一段话可能并不是完整的, 因此第二次翻译时你要把第一次直译的结果看成一个整体,
+        遵守原意的前提下进行重新意译, 然后分配每句话对应的翻译, 翻译的要优雅且符合中文表达习惯
 
         例如输入：
         3. We have thousands of friends on this.
@@ -184,7 +184,7 @@ def main():
         translator = SubtitleTranslator(
             api_key=os.getenv("OPENAI_API_KEY"),
             model="gpt-4o",
-            chunk_size=20
+            chunk_size=10
         )
         translator.translate_file(input_file, output_file)
     except SubtitleError as e:
