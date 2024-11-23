@@ -3,7 +3,7 @@
 import sys
 
 if len(sys.argv) != 3:
-    print("用法: 输入文件.srt 输出文件.srt")
+    print("处理开头首字母大写, 用法: 输入文件.srt 输出文件.srt")
     sys.exit(1)
 
 input_file = sys.argv[1]
