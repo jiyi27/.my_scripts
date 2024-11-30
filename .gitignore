@@ -1,4 +1,5 @@
-# Virtual environments
+# Wildcards (*) don't match files/directories 
+# that begin with a dot unless explicitly specified.
 *env/
 .env/
 .venv/
