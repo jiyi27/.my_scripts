@@ -17,5 +17,5 @@ export PATH="$HOME/.my_scripts:$PATH"
 
 ```bash
 chmod +x my_scripts_install.sh
-./install.sh
+./my_scripts_install.sh
 ```
