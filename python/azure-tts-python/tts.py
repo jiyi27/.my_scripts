@@ -24,7 +24,7 @@ class AzureTTS:
         self.speech_config.speech_synthesis_voice_name = "zh-CN-XiaoxiaoMultilingualNeural"
         self.language = "zh-CN"
         self.voice_role = None
-        self.voice_style = "Chat-casual"
+        self.voice_style = None
 
     def set_voice(self, voice_name):
         """Set the voice for synthesis"""
