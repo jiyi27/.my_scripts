@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 import azure.cognitiveservices.speech as speechsdk
 
@@ -102,8 +103,13 @@ class AzureTTS:
                 print(f"Error: Input file is empty: {input_file}")
                 sys.exit(1)
 
-            output_path = output_dir_path / f"{input_path.stem}.wav"
-            self.text_to_speech(text, str(output_path), role=self.voice_role, style=self.voice_style, language=self.language)
+            # 获取当前时间并格式化为字符串
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # 在原文件名和扩展名之间插入时间戳
+            output_path = output_dir_path / f"{input_path.stem}_{timestamp}.wav"
+
+            self.text_to_speech(text, str(output_path), role=self.voice_role, style=self.voice_style,
+                                language=self.language)
 
         except Exception as e:
             print(f"Error during file processing: {str(e)}")
