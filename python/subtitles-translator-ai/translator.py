@@ -1,7 +1,6 @@
 import re
 import os
 import sys
-import argparse
 from dataclasses import dataclass
 from typing import List, Tuple
 from openai import OpenAI
@@ -65,37 +64,52 @@ class SubtitleTranslator:
         self.model = model
         self.chunk_size = chunk_size
         self.system_prompt = """
-        分成两次翻译：
-        1. 根据英文内容直译，保持原有格式，不要遗漏任何信息
-        2. 根据第一次直译的结果重新意译，遵守原意的前提下让内容更通俗易懂、符合中文表达习惯
+        你是一个专业的字幕翻译专家, 请严格按照以下要求进行翻译:
 
-        例如输入：
-        3. We have thousands of friends on this.
-        4. incredible movement.
+翻译过程分为两个阶段：
 
-        严格按照一下格式输出:
+1. 直译阶段：
+    - 严格逐字逐句翻译
+    - 专有名词保持英文
+
+2. 意译阶段：
+    - 基于直译结果, 识别并理解完整的句子含义, 考虑上下文关系, 将生硬的直译改写为地道的中文表达
+    - 确保相邻行之间逻辑连贯, 避免单独翻译导致的语义矛盾
+    - 缩写词和专业术语使用大众能理解的说法
+    - 禁止添加或臆测不存在的信息
+
+因为我翻译的是字幕, 我要把 index 对应的内容加入到文件里, 如果你直接省略了某一行或者把两行合并为一行, 会导致字幕不匹配, 请务必注意。
+
+正确示例：
+输入：
+38. in the House formed the bill, but that process wasn't transparent
+39. to the rest of the congress people.
+
+正确输出：
+{
+    "literal": [
         {
-          "literal": [
-            {
-              "index": 3,
-              "translation": "世界, 你好"
-            },
-            {
-              "index": 4,
-              "translation": "你好吗?"
-            }
-          ],
-          "free": [
-            {
-              "index": 3,
-              "translation": "你好吗? 世界"
-            },
-            {
-              "index": 4,
-              "translation": "最近过的怎么样?"
-            }
-          ]
+            "index": 38,
+            "translation": "在众议院制定了该法案, 但是那个过程并不透明"
+        },
+        {
+            "index": 39,
+            "translation": "对其余的国会议员来说"
         }
+    ],
+    "free": [
+        {
+            "index": 38,
+            "translation": "众议院起草了这项法案，但这个过程对其他"
+        },
+        {
+            "index": 39,
+            "translation": "国会议员而言并不透明"
+        }
+    ]
+}
+
+请按照以上格式和要求翻译接下来的内容:
         """
 
     @staticmethod
@@ -123,6 +137,9 @@ class SubtitleTranslator:
         return cleaned
 
     def translate_subtitle_entry_chunk(self, entries: List[SubtitleEntry]) -> List[Tuple[int, str]]:
+        # 打印原始字幕内容, 用于调试
+        # print(self._format_subtitle_entries(entries))
+        # return [(entry.index, entry.content) for entry in entries]
         prompt = self._format_subtitle_entries(entries)
         try:
             response = self.client.chat.completions.create(
@@ -137,6 +154,9 @@ class SubtitleTranslator:
 
             try:
                 translations = json.loads(cleaned_response)
+                # 打印翻译结果, 用于调试
+                # print(translations)
+                # print('-' * 30)
                 return [(t["index"], t["translation"]) for t in translations["free"]]
             except (json.JSONDecodeError, KeyError) as e:
                 # return [(entry.index, entry.content) for entry in entries]
@@ -183,7 +203,7 @@ def main():
         translator = SubtitleTranslator(
             api_key=os.getenv("OPENAI_API_KEY"),
             model="gpt-4o",
-            chunk_size=15
+            chunk_size=20
         )
         translator.translate_file(input_file, output_file)
     except SubtitleError as e:

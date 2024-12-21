@@ -6,7 +6,7 @@ import azure.cognitiveservices.speech as speechsdk
 
 
 class AzureTTS:
-    def __init__(self):
+    def __init__(self, english=False):
         """
         Initialize Azure TTS client using environment variables
         """
@@ -21,9 +21,9 @@ class AzureTTS:
             subscription=self.subscription_key,
             region=self.region
         )
-        # other options: zh-CN-XiaochenMultilingualNeural, zh-CN-XiaoxiaoMultilingualNeural
-        self.speech_config.speech_synthesis_voice_name = "zh-CN-XiaoxiaoMultilingualNeural"
-        self.language = "zh-CN"
+        # other options: zh-CN-XiaochenMultilingualNeural, zh-CN-XiaoxiaoMultilingualNeural, en-US-AndrewMultilingualNeural
+        self.speech_config.speech_synthesis_voice_name = "en-US-AndrewMultilingualNeural" if english else "zh-CN-XiaoxiaoMultilingualNeural"
+        self.language = "en-US" if english else "zh-CN"
         self.voice_role = None
         self.voice_style = None
 
@@ -81,8 +81,10 @@ class AzureTTS:
             print(f"Speech synthesis canceled: {cancellation_details.reason}")
             if cancellation_details.reason == speechsdk.CancellationReason.Error:
                 if cancellation_details.error_details:
-                    print(f"Error details: {cancellation_details.error_details}")
-                    print("Did you set the speech resource key and region values correctly?")
+                    print(
+                        f"Error details: {cancellation_details.error_details}")
+                    print(
+                        "Did you set the speech resource key and region values correctly?")
             sys.exit(1)
 
     def file_to_speech(self, input_file, output_dir):
@@ -106,7 +108,8 @@ class AzureTTS:
             # 获取当前时间并格式化为字符串
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             # 在原文件名和扩展名之间插入时间戳
-            output_path = output_dir_path / f"{input_path.stem}_{timestamp}.wav"
+            output_path = output_dir_path / \
+                f"{input_path.stem}_{timestamp}.wav"
 
             self.text_to_speech(text, str(output_path), role=self.voice_role, style=self.voice_style,
                                 language=self.language)
@@ -118,14 +121,17 @@ class AzureTTS:
 
 def main():
     """Main function to handle command line arguments and execute conversion"""
-    if len(sys.argv) != 3:
-        print("Usage: python script.py <input_file> <output_dir>")
+    if len(sys.argv) != 4:
+        print("Usage: python script.py <en|zh> <input_file> <output_dir>")
         sys.exit(1)
 
     try:
-        tts = AzureTTS()
-        input_file = sys.argv[1]
-        output_dir = sys.argv[2]
+        if sys.argv[1] == "en":
+            tts = AzureTTS(english=True)
+        else:
+            tts = AzureTTS()
+        input_file = sys.argv[2]
+        output_dir = sys.argv[3]
         tts.file_to_speech(input_file, output_dir)
 
     except Exception as e:
