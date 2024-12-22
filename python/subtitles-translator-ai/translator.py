@@ -2,10 +2,11 @@ import re
 import os
 import sys
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List
 from openai import OpenAI
 import json
 from pathlib import Path
+from datetime import datetime
 
 
 class SubtitleError(Exception):
@@ -28,34 +29,65 @@ class SubtitleItem:
         return f"{self.index}\n{self.timestamp}\n{self.content}\n"
 
 
-class SrtParser:
-    @staticmethod
-    def parse(file_path: str) -> List[SubtitleItem]:
-        if not Path(file_path).exists():
-            raise SubtitleError(f"找不到字幕文件: {file_path}")
+def parse_file(file_path: str) -> List[SubtitleItem]:
+    if not Path(file_path).exists():
+        raise SubtitleError(f"找不到字幕文件: {file_path}")
 
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except UnicodeDecodeError:
-            raise SubtitleError(f"无法读取字幕文件，请确保文件编码是UTF-8: {file_path}")
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except UnicodeDecodeError:
+        raise SubtitleError(f"无法读取字幕文件，请确保文件编码是UTF-8: {file_path}")
 
-        subtitle_blocks = re.split(r'\n\n+', content.strip())
-        if not subtitle_blocks:
-            raise SubtitleError("字幕文件为空")
+    subtitle_blocks = re.split(r'\n\n+', content.strip())
+    if not subtitle_blocks:
+        raise SubtitleError("字幕文件为空")
 
-        subtitle_items = []
-        for block in subtitle_blocks:
-            lines = block.split('\n')
-            if len(lines) < 3:
-                raise SubtitleError(f"格式错误的字幕块: {block}")
+    subtitle_items = []
+    for block in subtitle_blocks:
+        lines = block.split('\n')
+        if len(lines) < 3:
+            raise SubtitleError(f"格式错误的字幕块: {block}")
 
-            index = int(re.sub(r'\D', '', lines[0].strip()))
-            timestamp = lines[1]
-            content = '\n'.join(lines[2:])
-            subtitle_items.append(SubtitleItem(index, timestamp, content))
+        index = int(re.sub(r'\D', '', lines[0].strip()))
+        timestamp = lines[1]
+        content = '\n'.join(lines[2:])
+        subtitle_items.append(SubtitleItem(index, timestamp, content))
 
-        return subtitle_items
+    return subtitle_items
+
+
+def format_system_prompt() -> str:
+    system_prompt = f"""
+你是一个负责翻译字幕的程序, 要翻译的字幕内容, 它是 JSON 数组,
+
+你按照以下步骤进行翻译: 
+
+step1 直译：
+    - 逐行翻译
+    - 专有名词保持英文
+
+step2 意译：
+    - 基于直译结果, 识别并理解完整的句子含义, 考虑上下文关系, 将生硬的直译改写为地道的中文表达
+    - 确保相邻行之间逻辑连贯, 避免单独翻译导致的语义矛盾
+    - 禁止添加或臆测不存在的信息
+
+step3 分配翻译:
+  - 根据输入的 json 数组, 将 step2 的意译结果一一拆分
+  - 以 "{{原序号}}. {{原文}} {{原文对应的拆分后的译文}}" 格式输出每个项目的内容
+
+不要输出多余信息, 以 json 数组格式返回, 字幕数组如下:\n 
+    """
+    return system_prompt
+
+
+# 把多行字幕合并成一个有序号的字符串
+def _format_subtitle_items(items: List[SubtitleItem]) -> str:
+    formatted_items = [
+        f"{item.index}. {item.content.strip()}"
+        for item in items
+    ]
+    return json.dumps(formatted_items, ensure_ascii=False)
 
 
 class SubtitleTranslator:
@@ -63,58 +95,16 @@ class SubtitleTranslator:
         self.client = OpenAI(api_key=api_key)
         self.model = model
         self.chunk_size = chunk_size
-        self.system_prompt = """
-        你是一个专业的字幕翻译专家, 请严格按照以下要求进行翻译:
 
-翻译过程分为3个阶段：
-
-1. 直译阶段：
-    - 逐行翻译
-    - 专有名词保持英文
-
-2. 意译阶段：
-    - 基于直译结果, 识别并理解完整的句子含义, 考虑上下文关系, 将生硬的直译改写为地道的中文表达
-    - 确保相邻行之间逻辑连贯, 避免单独翻译导致的语义矛盾
-    - 禁止添加或臆测不存在的信息
-
-3. 校对阶段：
-
-正确示例：
-
-输入：
-
-38. in the House formed the bill, but that process wasn't transparent
-39. to the rest of the congress people.
-
-输出：
-
-literal:
-38. 在众议院制定了该法案, 但是那个过程并不透明
-39. 对其余的国会议员来说
-
-free:
-38. 众议院起草了这项法案，但这个过程对其他
-39. 国会议员而言并不透明
-
-输入字幕如下, 请开始按以上要求翻译:
-        """
-
-    # 把多行字幕合并成一个有序号的字符串
-    @staticmethod
-    def _format_subtitle_entries(entries: List[SubtitleItem]) -> str:
-        formatted_text = ""
-        for entry in entries:
-            formatted_text += f"{entry.index}. {entry.content.strip()}\n"
-        return formatted_text
-
-    # Open AI 翻译字幕
-    def translate_subtitle_entry_chunk(self, entries: List[SubtitleItem]) -> str:
-        user_prompt = self._format_subtitle_entries(entries)
+    # 发送到 Open AI 翻译字幕
+    def translate_subtitle_entry_chunk(self, subtitle_items: List[SubtitleItem]) -> str:
+        sys_tem_prompt = format_system_prompt()
+        user_prompt = _format_subtitle_items(subtitle_items)
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": self.system_prompt},
+                    {"role": "system", "content": sys_tem_prompt},
                     {"role": "user", "content": user_prompt}
                 ]
             )
@@ -126,7 +116,7 @@ free:
     # 拆解字幕文件, 转给 Open AI 分段翻译, 再合并成新的字幕文件
     def translate_file(self, input_file: str, output_file: str):
         # subtitle_items: List[SubtitleItem]
-        subtitle_items = SrtParser.parse(input_file)
+        subtitle_items = parse_file(input_file)
 
         # + self.chunk_size - 1 向上取整, 用于下面显示进度, 如: 1/7, 2/7, 3/7...
         # ‘//’ 在 Python 中是整除运算符（floor division operator）, 它会执行除法并向下取整（floor）到最接近的整数
@@ -150,12 +140,13 @@ free:
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("请指定两个参数 input.srt output.srt")
+    if len(sys.argv) != 2:
+        print("请指定字幕文件 input.srt ")
         sys.exit(1)
 
     input_file = sys.argv[1]
-    output_file = sys.argv[2]
+    timestamp = datetime.now().strftime("%m%d_%H%M%S")
+    output_file = f"{Path(input_file).stem}_{timestamp}.srt"
 
     try:
         translator = SubtitleTranslator(
