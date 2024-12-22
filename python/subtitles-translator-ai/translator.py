@@ -71,6 +71,7 @@ class SubtitleTranslator:
 1. 直译阶段：
     - 严格逐字逐句翻译
     - 专有名词保持英文
+    - 请保持序号一致, 不要调整字幕序号
 
 2. 意译阶段：
     - 基于直译结果, 识别并理解完整的句子含义, 考虑上下文关系, 将生硬的直译改写为地道的中文表达
@@ -78,38 +79,24 @@ class SubtitleTranslator:
     - 缩写词和专业术语使用大众能理解的说法
     - 禁止添加或臆测不存在的信息
 
-因为我翻译的是字幕, 我要把 index 对应的内容加入到文件里, 如果你直接省略了某一行或者把两行合并为一行, 会导致字幕不匹配, 请务必注意。
-
 正确示例：
+
 输入：
+
 38. in the House formed the bill, but that process wasn't transparent
 39. to the rest of the congress people.
 
-正确输出：
-{
-    "literal": [
-        {
-            "index": 38,
-            "translation": "在众议院制定了该法案, 但是那个过程并不透明"
-        },
-        {
-            "index": 39,
-            "translation": "对其余的国会议员来说"
-        }
-    ],
-    "free": [
-        {
-            "index": 38,
-            "translation": "众议院起草了这项法案，但这个过程对其他"
-        },
-        {
-            "index": 39,
-            "translation": "国会议员而言并不透明"
-        }
-    ]
-}
+输出：
 
-请按照以上格式和要求翻译接下来的内容:
+literal:
+38. 在众议院制定了该法案, 但是那个过程并不透明
+39. 对其余的国会议员来说
+
+free:
+38. 众议院起草了这项法案，但这个过程对其他
+39. 国会议员而言并不透明
+
+输入字幕为:
         """
 
     @staticmethod
@@ -137,9 +124,8 @@ class SubtitleTranslator:
         return cleaned
 
     def translate_subtitle_entry_chunk(self, entries: List[SubtitleEntry]) -> List[Tuple[int, str]]:
-        # 打印原始字幕内容, 用于调试
-        # print(self._format_subtitle_entries(entries))
-        # return [(entry.index, entry.content) for entry in entries]
+        # 打印原始字幕长度, 用于调试
+        print(f"原始字幕个数: {len(entries)}")
         prompt = self._format_subtitle_entries(entries)
         try:
             response = self.client.chat.completions.create(
@@ -154,9 +140,10 @@ class SubtitleTranslator:
 
             try:
                 translations = json.loads(cleaned_response)
-                # 打印翻译结果, 用于调试
-                # print(translations)
-                # print('-' * 30)
+                # 分别打印 free 和 literal 的翻译结果长度, 用于调试
+                print(
+                    f"literal length: {len(translations['literal'])}, free length: {len(translations['free'])}")
+                print("-" * 20)
                 return [(t["index"], t["translation"]) for t in translations["free"]]
             except (json.JSONDecodeError, KeyError) as e:
                 # return [(entry.index, entry.content) for entry in entries]
