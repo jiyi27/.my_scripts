@@ -19,7 +19,7 @@ class TranslationError(Exception):
 
 
 @dataclass
-class SubtitleEntry:
+class SubtitleItem:
     index: int
     timestamp: str
     content: str
@@ -30,7 +30,7 @@ class SubtitleEntry:
 
 class SrtParser:
     @staticmethod
-    def parse(file_path: str) -> List[SubtitleEntry]:
+    def parse(file_path: str) -> List[SubtitleItem]:
         if not Path(file_path).exists():
             raise SubtitleError(f"找不到字幕文件: {file_path}")
 
@@ -44,7 +44,7 @@ class SrtParser:
         if not subtitle_blocks:
             raise SubtitleError("字幕文件为空")
 
-        entries = []
+        subtitle_items = []
         for block in subtitle_blocks:
             lines = block.split('\n')
             if len(lines) < 3:
@@ -53,9 +53,9 @@ class SrtParser:
             index = int(re.sub(r'\D', '', lines[0].strip()))
             timestamp = lines[1]
             content = '\n'.join(lines[2:])
-            entries.append(SubtitleEntry(index, timestamp, content))
+            subtitle_items.append(SubtitleItem(index, timestamp, content))
 
-        return entries
+        return subtitle_items
 
 
 class SubtitleTranslator:
@@ -66,18 +66,18 @@ class SubtitleTranslator:
         self.system_prompt = """
         你是一个专业的字幕翻译专家, 请严格按照以下要求进行翻译:
 
-翻译过程分为两个阶段：
+翻译过程分为3个阶段：
 
 1. 直译阶段：
-    - 严格逐字逐句翻译
+    - 逐行翻译
     - 专有名词保持英文
-    - 请保持序号一致, 不要调整字幕序号
 
 2. 意译阶段：
     - 基于直译结果, 识别并理解完整的句子含义, 考虑上下文关系, 将生硬的直译改写为地道的中文表达
     - 确保相邻行之间逻辑连贯, 避免单独翻译导致的语义矛盾
-    - 缩写词和专业术语使用大众能理解的说法
     - 禁止添加或臆测不存在的信息
+
+3. 校对阶段：
 
 正确示例：
 
@@ -96,81 +96,52 @@ free:
 38. 众议院起草了这项法案，但这个过程对其他
 39. 国会议员而言并不透明
 
-输入字幕为:
+输入字幕如下, 请开始按以上要求翻译:
         """
 
+    # 把多行字幕合并成一个有序号的字符串
     @staticmethod
-    def _format_subtitle_entries(entries: List[SubtitleEntry]) -> str:
+    def _format_subtitle_entries(entries: List[SubtitleItem]) -> str:
         formatted_text = ""
         for entry in entries:
             formatted_text += f"{entry.index}. {entry.content.strip()}\n"
         return formatted_text
 
-    @staticmethod
-    def _clean_response(response: str) -> str:
-        # 移除开头和结尾的空白字符
-        cleaned = response.strip()
-
-        # 移除markdown标记
-        if cleaned.startswith('```'):
-            # 寻找第一个换行符，移除整个```json或```python等行
-            first_newline = cleaned.find('\n')
-            if first_newline != -1:
-                cleaned = cleaned[first_newline:].strip()
-            # 移除结尾的```
-            if cleaned.endswith('```'):
-                cleaned = cleaned[:-3].strip()
-
-        return cleaned
-
-    def translate_subtitle_entry_chunk(self, entries: List[SubtitleEntry]) -> List[Tuple[int, str]]:
-        # 打印原始字幕长度, 用于调试
-        print(f"原始字幕个数: {len(entries)}")
-        prompt = self._format_subtitle_entries(entries)
+    # Open AI 翻译字幕
+    def translate_subtitle_entry_chunk(self, entries: List[SubtitleItem]) -> str:
+        user_prompt = self._format_subtitle_entries(entries)
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": user_prompt}
                 ]
             )
-            raw_response = response.choices[0].message.content
-            cleaned_response = self._clean_response(raw_response)
 
-            try:
-                translations = json.loads(cleaned_response)
-                # 分别打印 free 和 literal 的翻译结果长度, 用于调试
-                print(
-                    f"literal length: {len(translations['literal'])}, free length: {len(translations['free'])}")
-                print("-" * 20)
-                return [(t["index"], t["translation"]) for t in translations["free"]]
-            except (json.JSONDecodeError, KeyError) as e:
-                # return [(entry.index, entry.content) for entry in entries]
-                raise TranslationError(
-                    f"解析响应失败, 请检查响应格式是否正确:\n{cleaned_response}\n" + str(e))
+            return response.choices[0].message.content
         except Exception as e:
             raise TranslationError(f"翻译失败: {str(e)}")
 
+    # 拆解字幕文件, 转给 Open AI 分段翻译, 再合并成新的字幕文件
     def translate_file(self, input_file: str, output_file: str):
-        entries = SrtParser.parse(input_file)
+        # subtitle_items: List[SubtitleItem]
+        subtitle_items = SrtParser.parse(input_file)
 
-        total_chunks = (len(entries) + self.chunk_size - 1) // self.chunk_size
+        # + self.chunk_size - 1 向上取整, 用于下面显示进度, 如: 1/7, 2/7, 3/7...
+        # ‘//’ 在 Python 中是整除运算符（floor division operator）, 它会执行除法并向下取整（floor）到最接近的整数
+        # 例如：print(25/10)    # 输出: 2.5, 向上取整(2.5) = 3
+        # 等价于: (25 + 10 - 1) // 10 = 34 // 10 = 3, 这也是为什么总要 -1
+        total_chunks = (len(subtitle_items) + self.chunk_size - 1) // self.chunk_size
         translated_entries = []
 
-        for chunk_index in range(0, len(entries), self.chunk_size):
-            chunk = entries[chunk_index:chunk_index + self.chunk_size]
-            current_chunk = chunk_index // self.chunk_size + 1
+        for i in range(0, len(subtitle_items), self.chunk_size):
+            chunk = subtitle_items[i:i + self.chunk_size]
+            current_chunk = i // self.chunk_size + 1
             print(f"翻译进度: {current_chunk}/{total_chunks}")
 
-            translations = self.translate_subtitle_entry_chunk(chunk)
-            for original_entry, (index, translation) in zip(chunk, translations):
-                translated_entry = SubtitleEntry(
-                    index=original_entry.index,
-                    timestamp=original_entry.timestamp,
-                    content=translation
-                )
-                translated_entries.append(translated_entry)
+            translated_entries.append(
+                self.translate_subtitle_entry_chunk(chunk))
 
         with open(output_file, 'w', encoding='utf-8') as f:
             for entry in translated_entries:
