@@ -145,7 +145,7 @@ def main():
         sys.exit(1)
 
     input_file = sys.argv[1]
-    timestamp = datetime.now().strftime("%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output_file = f"{Path(input_file).stem}_{timestamp}.srt"
 
     try:
