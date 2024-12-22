@@ -1,13 +1,18 @@
 import re
 import os
 import sys
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List
 from openai import OpenAI
+import google.generativeai as genai
 import json
 from pathlib import Path
 from datetime import datetime
 
+_openai_model = "gpt-40"
+_gemini_model = "gemini-2.0-flash-exp"
+_chunk_size = 20
 
 class SubtitleError(Exception):
     """字幕处理相关的异常"""
@@ -58,30 +63,27 @@ def parse_file(file_path: str) -> List[SubtitleItem]:
 
 
 def format_system_prompt() -> str:
-    system_prompt = f"""
-你是一个负责翻译字幕的程序, 要翻译的字幕内容, 它是 JSON 数组,
+    system_prompt = '''
+    你是一个负责翻译字幕的程序, 要翻译的字幕内容, 它是 JSON 数组, 你按照以下步骤进行翻译:
 
-你按照以下步骤进行翻译: 
+    step1 直译：
+        - 逐行翻译
+        - 专有名词保持英文
 
-step1 直译：
-    - 逐行翻译
-    - 专有名词保持英文
+    step2 意译：
+        - 基于直译结果, 识别并理解完整的句子含义, 考虑上下文关系, 将生硬的直译改写为地道的中文表达
+        - 确保相邻行之间逻辑连贯, 避免单独翻译导致的语义矛盾
+        - 禁止添加或臆测不存在的信息
 
-step2 意译：
-    - 基于直译结果, 识别并理解完整的句子含义, 考虑上下文关系, 将生硬的直译改写为地道的中文表达
-    - 确保相邻行之间逻辑连贯, 避免单独翻译导致的语义矛盾
-    - 禁止添加或臆测不存在的信息
+    step3 分配翻译:
+      - 根据输入的 json 数组, 将 step2 的意译结果一一拆分
+      - 以 "{原序号}. {原文} {原文对应的拆分后的译文}" 格式输出每个项目的内容
 
-step3 分配翻译:
-  - 根据输入的 json 数组, 将 step2 的意译结果一一拆分
-  - 以 "{{原序号}}. {{原文}} {{原文对应的拆分后的译文}}" 格式输出每个项目的内容
-
-不要输出多余信息, 以 json 数组格式返回, 字幕数组如下:\n 
-    """
+    不要输出多余信息, 以 json 数组格式返回, 字幕数组如下:
+    '''
     return system_prompt
 
 
-# 把多行字幕合并成一个有序号的字符串
 def _format_subtitle_items(items: List[SubtitleItem]) -> str:
     formatted_items = [
         f"{item.index}. {item.content.strip()}"
@@ -90,33 +92,74 @@ def _format_subtitle_items(items: List[SubtitleItem]) -> str:
     return json.dumps(formatted_items, ensure_ascii=False)
 
 
-class SubtitleTranslator:
-    def __init__(self, api_key: str, model: str = "gpt-4o", chunk_size: int = 10):
+# ABC (Abstract Base Class), 是 Python 标准库中的 abc 模块提供的一个类
+class TranslationService(ABC):
+    @abstractmethod
+    def translate_chunk(self, subtitle_items: List[SubtitleItem]) -> str:
+        """翻译一组字幕"""
+        pass
+
+
+class OpenAITranslationService(TranslationService):
+    """OpenAI翻译服务实现"""
+
+    def __init__(self, api_key: str, model: str = _openai_model):
         self.client = OpenAI(api_key=api_key)
         self.model = model
-        self.chunk_size = chunk_size
 
-    # 发送到 Open AI 翻译字幕
-    def translate_subtitle_entry_chunk(self, subtitle_items: List[SubtitleItem]) -> str:
-        sys_tem_prompt = format_system_prompt()
+    def translate_chunk(self, subtitle_items: List[SubtitleItem]) -> str:
+        system_prompt = format_system_prompt()
         user_prompt = _format_subtitle_items(subtitle_items)
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": sys_tem_prompt},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ]
             )
-
             return response.choices[0].message.content
         except Exception as e:
-            raise TranslationError(f"翻译失败: {str(e)}")
+            raise TranslationError(f"OpenAI翻译失败: {str(e)}")
 
-    # 拆解字幕文件, 转给 Open AI 分段翻译, 再合并成新的字幕文件
+
+class GeminiTranslationService(TranslationService):
+    """Google Gemini翻译服务实现"""
+
+    def __init__(self, api_key: str, model: str = _gemini_model):
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel(model)
+
+    def translate_chunk(self, subtitle_items: List[SubtitleItem]) -> str:
+        system_prompt = format_system_prompt()
+        user_prompt = _format_subtitle_items(subtitle_items)
+
+        try:
+            response = self.model.generate_content(
+                [
+                    system_prompt,
+                    user_prompt
+                ]
+            )
+            return response.text
+        except Exception as e:
+            raise TranslationError(f"Gemini翻译失败: {str(e)}")
+
+
+class SubtitleTranslator:
+    """字幕翻译器，支持多种翻译服务"""
+
+    def __init__(self, translation_service: TranslationService, chunk_size: int = 10):
+        self.translation_service = translation_service
+        self.chunk_size = chunk_size
+
+    def translate_subtitle_entry_chunk(self, subtitle_items: List[SubtitleItem]) -> str:
+        return self.translation_service.translate_chunk(subtitle_items)
+
     def translate_file(self, input_file: str, output_file: str):
-        # subtitle_items: List[SubtitleItem]
-        subtitle_items = parse_file(input_file)
+        """拆解字幕文件, 分段转给 AI 分段翻译, 再合并成新的字幕文件"""
+        subtitle_items = parse_file(input_file)  #  subtitle_items: List[SubtitleItem]
 
         # + self.chunk_size - 1 向上取整, 用于下面显示进度, 如: 1/7, 2/7, 3/7...
         # ‘//’ 在 Python 中是整除运算符（floor division operator）, 它会执行除法并向下取整（floor）到最接近的整数
@@ -140,21 +183,37 @@ class SubtitleTranslator:
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("请指定字幕文件 input.srt ")
+    if len(sys.argv) < 3:
+        print("用法: <input.srt> <service>")
+        print("service 可选值: openai 或 gemini")
         sys.exit(1)
 
     input_file = sys.argv[1]
+    service_type = sys.argv[2].lower()
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output_file = f"{Path(input_file).stem}_{timestamp}.srt"
 
     try:
+        if service_type == "openai":
+            translation_service = OpenAITranslationService(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                model="gpt-4"
+            )
+        elif service_type == "gemini":
+            translation_service = GeminiTranslationService(
+                api_key=os.getenv("GOOGLE_API_KEY"),
+                model="gemini-pro"
+            )
+        else:
+            print(f"不支持的翻译服务: {service_type}")
+            sys.exit(1)
+
         translator = SubtitleTranslator(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-4o",
+            translation_service=translation_service,
             chunk_size=20
         )
         translator.translate_file(input_file, output_file)
+
     except SubtitleError as e:
         print(f"字幕处理错误: {str(e)}")
         sys.exit(1)
