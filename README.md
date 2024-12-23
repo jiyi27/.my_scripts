@@ -2,31 +2,31 @@
 
 ## Usage
 
--   **Edit the `config.sh` file to set the following variables**
+### Step 1. Edit the `config.sh` file to set the following variables
 
 BASE_DIR: The base directory where this project folder is located.
 
--   **Add .my_scripts to your PATH by adding the following line to your `.bashrc` or `.bash_profile` file**
+### Step 2. Add .my_scripts to your PATH by adding the following line to your `.bashrc` or `.bash_profile` file
 
 ```bash
 # $HOME is a shortcut for your home directory
 export PATH="$HOME/.my_scripts:$PATH"
 ```
 
--   **Run the following command to install the scripts**
+### Step 3. Run the following command to install the scripts
 
 ```bash
 chmod +x my_scripts_install.sh
 ./my_scripts_install.sh
 ```
 
--   **Add new scripts**
+### Step 4. Add new scripts (optional)
 
 因为已经把 `~/.my_scripts` 加入到 PATH 了, 所以只要把新的脚本放到项目根目录下就可以了.
 
 ## Scripts
 
--  **`translate_subtitles.sh`**
+### Script 1. `translate_subtitles.sh`
 
 ```bash
 translate_subtitles.sh subtitle.srt <openai | gemini>
@@ -36,7 +36,7 @@ translate_subtitles.sh subtitle.srt <openai | gemini>
 
 翻译的文件需要手动校对, 为了机器翻译在相邻行之间逻辑连贯, 避免单独翻译导致的语义矛盾, 机器可能会有合并行的操作, 这会导致有的英文句子对应翻译内容为空, 或者缺少行.
 
--   **`merge_subtitle.py`**
+### Script 2. `merge_subtitle.py`
 
 ```bash
 $merge_subtitle.py subtitle.srt translation.srt
@@ -75,7 +75,7 @@ heading for a government shutdown, and in large part this is due to the influenc
 面临政府关门，这在很大程度上是由于Elon Musk的影响
 ```
 
--   **`capitalize.py`**
+### Script 3. `capitalize.py`
 
 ```bash
 $capitalize.py input_file
@@ -83,7 +83,7 @@ $capitalize.py input_file
 
 将文件中每句话开头的首字母大写(如果是英文)
 
--   **`tts.sh`**
+### Script 4. `tts.sh`
 
 ```bash
 tts.sh en transcript.txt
