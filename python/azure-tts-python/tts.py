@@ -87,31 +87,22 @@ class AzureTTS:
                         "Did you set the speech resource key and region values correctly?")
             sys.exit(1)
 
-    def file_to_speech(self, input_file, output_dir):
+    def file_to_speech(self, input_file_path, output_file_path):
         """Convert text file to speech file"""
         try:
-            input_path = Path(input_file)
+            input_path = Path(input_file_path)
             if not input_path.is_file():
-                print(f"Error: Input file not found: {input_file}")
+                print(f"Error: Input file not found: {input_file_path}")
                 sys.exit(1)
-
-            output_dir_path = Path(output_dir)
-            output_dir_path.mkdir(parents=True, exist_ok=True)
 
             with input_path.open('r', encoding='utf-8') as f:
                 text = f.read().strip()
 
             if not text:
-                print(f"Error: Input file is empty: {input_file}")
+                print(f"Error: Input file is empty: {input_file_path}")
                 sys.exit(1)
 
-            # 获取当前时间并格式化为字符串
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            # 在原文件名和扩展名之间插入时间戳
-            output_path = output_dir_path / \
-                f"{input_path.stem}_{timestamp}.wav"
-
-            self.text_to_speech(text, str(output_path), role=self.voice_role, style=self.voice_style,
+            self.text_to_speech(text, str(output_file_path), role=self.voice_role, style=self.voice_style,
                                 language=self.language)
 
         except Exception as e:
@@ -121,18 +112,22 @@ class AzureTTS:
 
 def main():
     """Main function to handle command line arguments and execute conversion"""
-    if len(sys.argv) != 4:
-        print("Usage: python script.py <en|zh> <input_file> <output_dir>")
+    if len(sys.argv) != 3:
+        print("请提供语言以及台词文件")
+        print("语言可选值: zh 或 en")
         sys.exit(1)
 
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     try:
         if sys.argv[1] == "en":
             tts = AzureTTS(english=True)
         else:
             tts = AzureTTS()
-        input_file = sys.argv[2]
-        output_dir = sys.argv[3]
-        tts.file_to_speech(input_file, output_dir)
+
+        input_file_path = sys.argv[2]
+        output_file_path = f"{Path(input_file_path).stem}_{timestamp}.wav"
+
+        tts.file_to_speech(input_file_path, output_file_path)
 
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
