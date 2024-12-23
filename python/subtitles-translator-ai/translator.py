@@ -9,6 +9,7 @@ import google.generativeai as genai
 import json
 from pathlib import Path
 from datetime import datetime
+from sys_prompt import system_prompt_gemini
 
 _openai_model = "gpt-40"
 _gemini_model = "gemini-2.0-flash-exp"
@@ -44,12 +45,14 @@ def parse_file(file_path: str) -> List[SubtitleItem]:
     except UnicodeDecodeError:
         raise SubtitleError(f"无法读取字幕文件，请确保文件编码是UTF-8: {file_path}")
 
+    # 2个或更多连续空行分割字幕块
     subtitle_blocks = re.split(r'\n\n+', content.strip())
     if not subtitle_blocks:
         raise SubtitleError("字幕文件为空")
 
     subtitle_items = []
     for block in subtitle_blocks:
+        # 分割每个字幕块包含索引、时间戳和内容
         lines = block.split('\n')
         if len(lines) < 3:
             raise SubtitleError(f"格式错误的字幕块: {block}")
@@ -132,7 +135,7 @@ class GeminiTranslationService(TranslationService):
         self.model = genai.GenerativeModel(model)
 
     def translate_chunk(self, subtitle_items: List[SubtitleItem]) -> str:
-        system_prompt = format_system_prompt()
+        system_prompt = system_prompt_gemini
         user_prompt = _format_subtitle_items(subtitle_items)
 
         try:

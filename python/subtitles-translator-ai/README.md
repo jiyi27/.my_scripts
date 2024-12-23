@@ -26,6 +26,9 @@ Then run the following command to install the required packages.
 ```bash
 pip install -r requirements.txt
 ```
+
+> requirements.txt file is located in the root of the project folder.
+
 ## Usage
 
 ```bash

@@ -1,4 +1,4 @@
-system_prompt_1 = rf'''
+system_prompt_gemini = rf'''
 你是一个负责翻译字幕的程序, 要翻译的字幕内容, 它是 JSON 数组, 你按照以下步骤进行翻译:
 
 step1 直译：
