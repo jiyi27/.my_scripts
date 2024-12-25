@@ -127,6 +127,22 @@ class GeminiTranslationService(TranslationService):
             raise TranslationError(f"Gemini翻译失败: {str(e)}")
 
 
+def clean_response(response: str) -> str:
+    # 移除开头和结尾的空白字符
+    cleaned = response.strip()
+
+    # 移除markdown标记
+    if cleaned.startswith('```'):
+        # 寻找第一个换行符，移除整个```json或```python等行
+        first_newline = cleaned.find('\n')
+        if first_newline != -1:
+            cleaned = cleaned[first_newline:].strip()
+        # 移除结尾的```
+        if cleaned.endswith('```'):
+            cleaned = cleaned[:-3].strip()
+
+    return cleaned
+
 class SubtitleTranslator:
     """字幕翻译器，支持多种翻译服务"""
 
@@ -146,18 +162,49 @@ class SubtitleTranslator:
         # 例如：print(25/10)    # 输出: 2.5, 向上取整(2.5) = 3
         # 等价于: (25 + 10 - 1) // 10 = 34 // 10 = 3, 这也是为什么总要 -1
         total_chunks = (len(subtitle_items) + self.chunk_size - 1) // self.chunk_size
-        translated_entries = []
+        translated_items = []
 
         for i in range(0, len(subtitle_items), self.chunk_size):
             chunk = subtitle_items[i:i + self.chunk_size]
             current_chunk = i // self.chunk_size + 1
             print(f"翻译进度: {current_chunk}/{total_chunks}")
 
-            translated_entries.append(
-                self.translate_subtitle_entry_chunk(chunk))
+            # 方法1. 手动处理, 可将下面的代码注释掉, 直接保存返回体到文件
+            # translated_items.append(
+            #     self.translate_subtitle_entry_chunk(chunk))
+
+            # -----------方法2. 自动处理, 若使用方法1, 则需要将下面代码注释掉-----------
+            cleaned_response = clean_response(self.translate_subtitle_entry_chunk(chunk))
+
+            try:
+                # 每个 translated_item 应该有的结构:
+                # {
+                #     "index": "136",
+                #     "original": "ought to stand up as to what they represent, what they stand for.",
+                #     "translated": "应该坚持他们所代表的，他们所坚持的。"
+                #   }
+                translation_list = json.loads(cleaned_response)
+                # 提取出元组列表 [(index, translated), ...]
+                translation_list = [(t["index"], t["translated"]) for t in translation_list]
+            except (json.JSONDecodeError, KeyError) as e:
+                raise TranslationError(
+                    f"解析响应失败, 请检查响应格式是否正确:\n{cleaned_response}\n" + str(e))
+
+            # 重新构建字幕块
+            for original_entry, (index, translation) in zip(chunk, translation_list):
+                if int(index) != int(original_entry.index):
+                    raise TranslationError(
+                        f"翻译错误: 索引不匹配, 期望: {original_entry.index}, 实际: {index}, 返回体:\n{cleaned_response}")
+                item = SubtitleItem(
+                    index=index,
+                    timestamp=original_entry.timestamp,
+                    content=translation
+                )
+                translated_items.append(item)
+        # -------------------方法2. 自动处理, 若使用方法1, 则需要将上面代码注释掉-------------------
 
         with open(output_file, 'w', encoding='utf-8') as f:
-            for entry in translated_entries:
+            for entry in translated_items:
                 f.write(str(entry) + '\n')
         print(f"\n翻译完成! 已保存到: {output_file}")
 
