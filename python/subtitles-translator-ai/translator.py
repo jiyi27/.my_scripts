@@ -64,29 +64,6 @@ def parse_file(file_path: str) -> List[SubtitleItem]:
 
     return subtitle_items
 
-
-def format_system_prompt() -> str:
-    system_prompt = '''
-    你是一个负责翻译字幕的程序, 要翻译的字幕内容, 它是 JSON 数组, 你按照以下步骤进行翻译:
-
-    step1 直译：
-        - 逐行翻译
-        - 专有名词保持英文
-
-    step2 意译：
-        - 基于直译结果, 识别并理解完整的句子含义, 考虑上下文关系, 将生硬的直译改写为地道的中文表达
-        - 确保相邻行之间逻辑连贯, 避免单独翻译导致的语义矛盾
-        - 禁止添加或臆测不存在的信息
-
-    step3 分配翻译:
-      - 根据输入的 json 数组, 将 step2 的意译结果一一拆分
-      - 以 "{原序号}. {原文} {原文对应的拆分后的译文}" 格式输出每个项目的内容
-
-    不要输出多余信息, 以 json 数组格式返回, 字幕数组如下:
-    '''
-    return system_prompt
-
-
 def _format_subtitle_items(items: List[SubtitleItem]) -> str:
     formatted_items = [
         f"{item.index}. {item.content.strip()}"
@@ -111,7 +88,7 @@ class OpenAITranslationService(TranslationService):
         self.model = model
 
     def translate_chunk(self, subtitle_items: List[SubtitleItem]) -> str:
-        system_prompt = format_system_prompt()
+        system_prompt = system_prompt_gemini
         user_prompt = _format_subtitle_items(subtitle_items)
 
         try:
