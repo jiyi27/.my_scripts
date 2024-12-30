@@ -6,7 +6,7 @@ import azure.cognitiveservices.speech as speechsdk
 
 
 class AzureTTS:
-    def __init__(self, character="en-US-BrianMultilingualNeural", tone=None):
+    def __init__(self, character="en-US-BrianMultilingualNeural", tone=None, speed=None):
         """
         Initialize Azure TTS client using environment variables
         """
@@ -25,23 +25,26 @@ class AzureTTS:
         # other options: zh-CN-XiaochenMultilingualNeural, zh-CN-XiaoxiaoMultilingualNeural, en-US-AndrewMultilingualNeural
         self.speech_config.speech_synthesis_voice_name = character
         self.voice_tone = tone
+        self.voice_speed = speed
         self.voice_role = None
         self.voice_style = None
 
-    def _create_ssml(self, text, role=None, style=None, tone=None):
+    def _create_ssml(self, text, role=None, style=None, tone=None, speed=None):
         """
         Create SSML with role, style and language support
         Only supports en-US language for now
         """
         speak_attr_start = f""" <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="en-US"> """
+        speak_attr_end = f""" </speak> """
         voice_attr_start = f""" <voice name="{self.speech_config.speech_synthesis_voice_name}"> """
         voice_attr_end = f""" </voice> """
-        speak_attr_end = f""" </speak> """
         content = f""" {text} """
         express_as_start = ""
         express_as_end = ""
         lang_attr_start = ""
         lang_attr_end = ""
+        prosody_start = ""
+        prosody_end = ""
 
         if role or style:
             express_as_attrs = []
@@ -56,17 +59,23 @@ class AzureTTS:
             lang_attr_start = f"""<lang xml:lang="{tone}">"""
             lang_attr_end = f"""</lang>"""
 
+        if speed:
+            prosody_start = f"""<prosody rate="{speed}%">"""
+            prosody_end = f"""</prosody>"""
+
         return (f"{speak_attr_start}"
                 f"{voice_attr_start}"
                 f"{express_as_start}"
                 f"{lang_attr_start}"
+                f"{prosody_start}"
                 f"{content}"
+                f"{prosody_end}"
                 f"{lang_attr_end}"
                 f"{express_as_end}"
                 f"{voice_attr_end}"
                 f"{speak_attr_end}")
 
-    def text_to_speech(self, text, output_path, role=None, style=None, tone=None):
+    def text_to_speech(self, text, output_path, role=None, style=None, tone=None, speed=None):
         """Convert text to speech and save to file"""
         audio_config = speechsdk.audio.AudioOutputConfig(filename=output_path)
         synthesizer = speechsdk.SpeechSynthesizer(
@@ -75,7 +84,7 @@ class AzureTTS:
         )
 
         if role or style or tone:
-            ssml = self._create_ssml(text, role, style, tone)
+            ssml = self._create_ssml(text, role, style, tone, speed)
             result = synthesizer.speak_ssml_async(ssml).get()
         else:
             result = synthesizer.speak_text_async(text).get()
@@ -109,7 +118,7 @@ class AzureTTS:
                 sys.exit(1)
 
             self.text_to_speech(text, str(output_file_path), role=self.voice_role, style=self.voice_style,
-                                tone=self.voice_tone)
+                                tone=self.voice_tone, speed=self.voice_speed)
 
         except Exception as e:
             print(f"Error during file processing: {str(e)}")
@@ -118,17 +127,25 @@ class AzureTTS:
 
 def main():
     """Main function to handle command line arguments and execute conversion"""
-    if len(sys.argv) != 3:
-        print("请提供语言以及台词文件")
+    if len(sys.argv) < 3:
+        print("请提供语言, 台词文件, 速度(可不填)")
         print("语言可选值: zh, us, gb")
+        print("速度可选值: -100~100, 百分比")
         sys.exit(1)
+
+    tone = None
+    speed = None
+    character = None
+    if len(sys.argv) == 4:
+        if int(sys.argv[3]) < -100 or int(sys.argv[3]) > 100:
+            print("速度可选值: -100~100, 百分比")
+            sys.exit(1)
+        speed = sys.argv[3]
 
     if sys.argv[1] not in ["zh", "us", "gb"]:
         print("语言可选值: zh, us, gb")
         sys.exit(1)
 
-    character = None
-    tone = None
     if sys.argv[1] == "zh":
         character = "zh-CN-XiaoxiaoMultilingualNeural"
     elif sys.argv[1] == "us":
@@ -139,7 +156,7 @@ def main():
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     try:
-        tts = AzureTTS(character, tone)
+        tts = AzureTTS(character, tone, speed)
 
         input_file_path = sys.argv[2]
         output_file_path = f"{Path(input_file_path).stem}_{timestamp}.wav"
