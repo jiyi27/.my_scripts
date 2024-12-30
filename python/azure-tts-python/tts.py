@@ -132,9 +132,9 @@ def main():
     if sys.argv[1] == "zh":
         character = "zh-CN-XiaoxiaoMultilingualNeural"
     elif sys.argv[1] == "us":
-        character = "en-US-BrianMultilingualNeural"
+        character = "en-US-BrandonMultilingualNeural"
     elif sys.argv[1] == "gb":
-        character = "en-US-BrianMultilingualNeural"
+        character = "en-US-BrandonMultilingualNeural"
         tone = "en-GB"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
