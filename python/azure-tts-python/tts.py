@@ -6,7 +6,7 @@ import azure.cognitiveservices.speech as speechsdk
 
 
 class AzureTTS:
-    def __init__(self, english=False):
+    def __init__(self, character="en-US-BrianMultilingualNeural", tone=None):
         """
         Initialize Azure TTS client using environment variables
         """
@@ -21,46 +21,52 @@ class AzureTTS:
             subscription=self.subscription_key,
             region=self.region
         )
+
         # other options: zh-CN-XiaochenMultilingualNeural, zh-CN-XiaoxiaoMultilingualNeural, en-US-AndrewMultilingualNeural
-        self.speech_config.speech_synthesis_voice_name = "en-US-AndrewMultilingualNeural" if english else "zh-CN-XiaoxiaoMultilingualNeural"
-        self.language = "en-US" if english else "zh-CN"
+        self.speech_config.speech_synthesis_voice_name = character
+        self.voice_tone = tone
         self.voice_role = None
         self.voice_style = None
 
-    def set_voice(self, voice_name):
-        """Set the voice for synthesis"""
-        self.speech_config.speech_synthesis_voice_name = voice_name
-
-    def _create_ssml(self, text, role=None, style=None, language="zh-CN"):
+    def _create_ssml(self, text, role=None, style=None, tone=None):
         """
         Create SSML with role, style and language support
+        Only supports en-US language for now
         """
-        ssml = f"""
-        <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="{language}">
-            <voice name="{self.speech_config.speech_synthesis_voice_name}">
-        """
+        speak_attr_start = f""" <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="en-US"> """
+        voice_attr_start = f""" <voice name="{self.speech_config.speech_synthesis_voice_name}"> """
+        voice_attr_end = f""" </voice> """
+        speak_attr_end = f""" </speak> """
+        content = f""" {text} """
+        express_as_start = ""
+        express_as_end = ""
+        lang_attr_start = ""
+        lang_attr_end = ""
 
-        # Build express-as tag if role or style is provided
         if role or style:
             express_as_attrs = []
             if role:
                 express_as_attrs.append(f'role="{role}"')
             if style:
                 express_as_attrs.append(f'style="{style}"')
-            ssml += f'<mstts:express-as {" ".join(express_as_attrs)}>'
+            express_as_start = f""" <mstts:express-as {" ".join(express_as_attrs)}> """
+            express_as_end = f""" </mstts:express-as> """
 
-        ssml += f"{text}"
+        if tone:
+            lang_attr_start = f"""<lang xml:lang="{tone}">"""
+            lang_attr_end = f"""</lang>"""
 
-        if role or style:
-            ssml += '</mstts:express-as>'
+        return (f"{speak_attr_start}"
+                f"{voice_attr_start}"
+                f"{express_as_start}"
+                f"{lang_attr_start}"
+                f"{content}"
+                f"{lang_attr_end}"
+                f"{express_as_end}"
+                f"{voice_attr_end}"
+                f"{speak_attr_end}")
 
-        ssml += """
-            </voice>
-        </speak>
-        """
-        return ssml
-
-    def text_to_speech(self, text, output_path, role=None, style=None, language=None):
+    def text_to_speech(self, text, output_path, role=None, style=None, tone=None):
         """Convert text to speech and save to file"""
         audio_config = speechsdk.audio.AudioOutputConfig(filename=output_path)
         synthesizer = speechsdk.SpeechSynthesizer(
@@ -68,8 +74,8 @@ class AzureTTS:
             audio_config=audio_config
         )
 
-        if role or style:
-            ssml = self._create_ssml(text, role, style, language)
+        if role or style or tone:
+            ssml = self._create_ssml(text, role, style, tone)
             result = synthesizer.speak_ssml_async(ssml).get()
         else:
             result = synthesizer.speak_text_async(text).get()
@@ -103,7 +109,7 @@ class AzureTTS:
                 sys.exit(1)
 
             self.text_to_speech(text, str(output_file_path), role=self.voice_role, style=self.voice_style,
-                                language=self.language)
+                                tone=self.voice_tone)
 
         except Exception as e:
             print(f"Error during file processing: {str(e)}")
@@ -114,15 +120,26 @@ def main():
     """Main function to handle command line arguments and execute conversion"""
     if len(sys.argv) != 3:
         print("请提供语言以及台词文件")
-        print("语言可选值: zh 或 en")
+        print("语言可选值: zh, us, gb")
         sys.exit(1)
+
+    if sys.argv[1] not in ["zh", "us", "gb"]:
+        print("语言可选值: zh, us, gb")
+        sys.exit(1)
+
+    character = None
+    tone = None
+    if sys.argv[1] == "zh":
+        character = "zh-CN-XiaoxiaoMultilingualNeural"
+    elif sys.argv[1] == "us":
+        character = "en-US-BrianMultilingualNeural"
+    elif sys.argv[1] == "gb":
+        character = "en-US-BrianMultilingualNeural"
+        tone = "en-GB"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     try:
-        if sys.argv[1] == "en":
-            tts = AzureTTS(english=True)
-        else:
-            tts = AzureTTS()
+        tts = AzureTTS(character, tone)
 
         input_file_path = sys.argv[2]
         output_file_path = f"{Path(input_file_path).stem}_{timestamp}.wav"
