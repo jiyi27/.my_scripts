@@ -83,7 +83,7 @@ class AzureTTS:
             audio_config=audio_config
         )
 
-        if role or style or tone:
+        if role or style or tone or speed:
             ssml = self._create_ssml(text, role, style, tone, speed)
             result = synthesizer.speak_ssml_async(ssml).get()
         else:
