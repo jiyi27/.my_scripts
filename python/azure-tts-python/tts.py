@@ -146,8 +146,9 @@ def main():
         print("语言可选值: zh, us, gb")
         sys.exit(1)
 
+    # zh-CN-XiaoxiaoMultilingualNeural
     if sys.argv[1] == "zh":
-        character = "zh-CN-XiaoxiaoMultilingualNeural"
+        character = "zh-CN-YunxiNeural"
     elif sys.argv[1] == "us":
         character = "en-US-BrandonMultilingualNeural"
     elif sys.argv[1] == "gb":
